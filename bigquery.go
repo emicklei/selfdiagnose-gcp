@@ -16,7 +16,7 @@ type CheckBigQueryTablePermissions struct {
 	IsUpdateable bool
 }
 
-func (c *CheckBigQueryTablePermissions) Run(ctx *selfdiagnose.Context, result *selfdiagnose.Result) {
+func (c *CheckBigQueryTablePermissions) Run(dctx *selfdiagnose.Context, result *selfdiagnose.Result) {
 	parts := strings.Split(c.TableID, ".")
 	project := parts[0]
 	dataset := parts[1]
@@ -27,8 +27,14 @@ func (c *CheckBigQueryTablePermissions) Run(ctx *selfdiagnose.Context, result *s
 		result.Reason = fmt.Errorf("could not create bigquery client:%w", err)
 		return
 	}
+	ctx := context.Background()
+	if c.BasicTask.Timeout() > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, c.BasicTask.Timeout())
+		defer cancel()
+	}
 	bqTable := client.Dataset(dataset).Table(table)
-	_, err = bqTable.Metadata(context.Background())
+	_, err = bqTable.Metadata(ctx)
 	if err != nil {
 		result.Passed = false
 		result.Reason = fmt.Errorf("could read metadata:%w", err)
@@ -41,7 +47,7 @@ func (c *CheckBigQueryTablePermissions) Run(ctx *selfdiagnose.Context, result *s
 	if c.IsUpdateable {
 		tocheck = append(tocheck, "bigquery.tables.update")
 	}
-	subset, err := bqTable.IAM().TestPermissions(context.Background(), tocheck)
+	subset, err := bqTable.IAM().TestPermissions(ctx, tocheck)
 	if err != nil {
 		result.Passed = false
 		result.Reason = fmt.Errorf("could read permissions:%w", err)

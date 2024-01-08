@@ -14,7 +14,7 @@ type CheckSubscriptionPullPermission struct {
 	SubscriptionName string // full qualified name , e.g. projects/.../subscriptions/....
 }
 
-func (c *CheckSubscriptionPullPermission) Run(ctx *selfdiagnose.Context, result *selfdiagnose.Result) {
+func (c *CheckSubscriptionPullPermission) Run(dctx *selfdiagnose.Context, result *selfdiagnose.Result) {
 	parts := strings.Split(c.SubscriptionName, "/")
 	projectID := parts[1]
 	name := parts[3]
@@ -26,7 +26,13 @@ func (c *CheckSubscriptionPullPermission) Run(ctx *selfdiagnose.Context, result 
 	}
 	sub := client.Subscription(name)
 	tocheck := []string{"pubsub.subscriptions.consume"}
-	subset, err := sub.IAM().TestPermissions(context.Background(), tocheck)
+	ctx := context.Background()
+	if c.BasicTask.Timeout() > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, c.BasicTask.Timeout())
+		defer cancel()
+	}
+	subset, err := sub.IAM().TestPermissions(ctx, tocheck)
 	if err != nil {
 		result.Passed = false
 		result.Reason = fmt.Errorf("could test permissions:%w", err)
